@@ -4,4 +4,3 @@ tqdm=='4.47.0'
 joblib=='0.16.0'
 fire=='0.3.1'
 python-magic
-joblib
