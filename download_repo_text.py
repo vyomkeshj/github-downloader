@@ -71,7 +71,9 @@ def get_content(f):
         except UnicodeDecodeError:
             return
         except:
-            traceback.print_exc()
+            err = traceback.format_exc()
+            if verbose:
+                print(err)
             time.sleep(0.1)
             return
     except KeyboardInterrupt:
@@ -83,19 +85,20 @@ def get_content(f):
             # something went horribly wrong!
             ...
     except:
-        print(type, f, enc)
-        traceback.print_exc()
+        err = traceback.format_exc()
+        if verbose:
+            print(err)
         time.sleep(0.1)
         return
 
 
-def process_repo_list(repo_data, timeout=150):
+def process_repo_list(repo_data, timeout=300):
     out = None
     try:
         name, stars, lang = repo_data
         meta = {'repo_name': name, 'stars': stars, 'repo_language': lang}
         repodir = f'./.tmp/{name.split("/")[-1]}'
-        p = subprocess.Popen(f'git clone --depth 1 --single-branch https://github.com/{name} {repodir}', shell=True,
+        p = subprocess.Popen(f'GIT_TERMINAL_PROMPT=0 git clone --depth 1 --single-branch https://github.com/{name} {repodir}', shell=True,
                              stdout=subprocess.DEVNULL, stderr=subprocess.STDOUT)
         try:
             p.wait(timeout)
@@ -177,13 +180,17 @@ def process_repo_list(repo_data, timeout=150):
                 if text is not None:
                     meta['file_name'] = filenames[i]
                     meta['mime_type'] = extensions[i]
-
-                    out = [text, meta]
+                    if out is None:
+                        out = [[text, meta]]
+                    else:
+                        out.append([text, meta])
         shutil.rmtree(repodir, ignore_errors=True)
     except TimeoutError:
         print(f"Processing for {name} timed out")
     except Exception:
-        traceback.print_exc()
+        err = traceback.format_exc()
+        if verbose:
+            print(err)
     return out
 
 
@@ -191,7 +198,7 @@ def process_args():
     parser = argparse.ArgumentParser(
         description='CLI for github downloader - A tool for scraping repos as text from github')
     parser.add_argument('--n_threads', help='number of threads for parallel processing, defaults to cpu_count',
-                        default=0,
+                        default=4,
                         type=int)
     parser.add_argument('--n_stars', help='filter repos with less than n_stars stars',
                         default=-1,
@@ -199,6 +206,7 @@ def process_args():
     parser.add_argument('--chunk_size', help='size of chunks to feed into each thread',
                         default=-1,
                         type=int)
+    parser.add_argument('-v','--verbose', help='if flag is present, print errors', action='store_true')
     return parser.parse_args()
 
 
@@ -210,7 +218,7 @@ def process_repo_list_timeout(repo_data):
     return timeout(process_repo_list, args=(repo_data,))
 
 
-def timeout(func, args=(), kwargs={}, timeout_duration=300, default=None):
+def timeout(func, args=(), kwargs={}, timeout_duration=600, default=None):
     import signal
 
     def handler(signum, frame):
@@ -232,6 +240,7 @@ def timeout(func, args=(), kwargs={}, timeout_duration=300, default=None):
 if __name__ == '__main__':
 
     args = process_args()  # parse args
+    verbose = args.verbose
 
     # make output dirs
     if '.tmp' not in os.listdir():
@@ -252,7 +261,7 @@ if __name__ == '__main__':
     random.seed(420)
     random.shuffle(repo_data)
 
-    n_threads = cpu_count() if args.n_threads == 0 else args.n_threads
+    n_threads = cpu_count() * 3 if args.n_threads == 0 else args.n_threads
     chunk_size = n_threads if args.chunk_size == -1 else args.chunk_size
 
     assert n_threads != 0
@@ -264,17 +273,21 @@ if __name__ == '__main__':
     pool = Pool(n_threads)
     pbar = tqdm(repo_chunks, total=len(repo_chunks))
     commit_every = 10
+    success_hist = []
     for count, chunk in enumerate(pbar):
         repos_out = pool.map(process_repo_list_timeout, chunk)
         not_none = 0
         none = 0
-        for r in repos_out:
-            if r is not None:
+        for repo in repos_out:
+            if repo is not None:
                 not_none += 1
-                ar.add_data(r[0], meta=r[1])
+                for f in repo:
+                    ar.add_data(f[0], meta=f[1])
             else:
                 none += 1
+        subprocess.Popen("rm -rfv .tmp && mkdir .tmp", shell=True, stdout=subprocess.DEVNULL, stderr=subprocess.STDOUT)
         if count % commit_every == 0:
             ar.commit()
-        success_rate = (not_none / len(repos_out)) * 100
+        success_hist.append((not_none / len(repos_out)) * 100)
+        success_rate = sum(success_hist) / len(success_hist)
         pbar.set_postfix({"Success Rate": success_rate})
