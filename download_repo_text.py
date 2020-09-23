@@ -280,7 +280,7 @@ if __name__ == '__main__':
     random.seed(420)
     random.shuffle(repo_data)
 
-    n_threads = cpu_count() if args.n_threads == -1 else args.n_threads
+    n_threads = cpu_count() * 3 if args.n_threads == -1 else args.n_threads
     chunk_size = n_threads if args.chunk_size == -1 else args.chunk_size
 
     assert n_threads != 0
