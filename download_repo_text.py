@@ -11,7 +11,8 @@ import csv
 from multiprocessing import cpu_count, Pool
 from tqdm import tqdm
 import argparse
-
+import subprocess
+# from subprocess import DEVNULL, STDOUT, Popen
 
 mime = magic.Magic(mime=True)
 
@@ -83,13 +84,18 @@ def get_content(f):
         return
 
 
-def process_repo_list(repo_data):
+def process_repo_list(repo_data, timeout=300):
     out = None
     try:
         name, stars, lang = repo_data
         meta = {'repo_name': name, 'stars': stars, 'repo_language': lang}
         repodir = f'./.tmp/{name.split("/")[-1]}'
-        os.system(f'git clone --depth 1 --single-branch https://github.com/{name} {repodir}')
+        p = subprocess.Popen(f'git clone --depth 1 --single-branch https://github.com/{name} {repodir}', shell=True, stdout=subprocess.DEVNULL, stderr=subprocess.STDOUT)
+        try:
+            p.wait(timeout)
+        except subprocess.TimeoutExpired:
+            print(f'Git clone timed out for {name}')
+            p.kill()
         shutil.rmtree(f'{repodir}/.git', ignore_errors=True)
         for curdir, dirs, files in os.walk(repodir):
             bad_extensions = [
@@ -177,7 +183,7 @@ def process_args():
                         default=-1,
                         type=int)
     parser.add_argument('--chunk_size', help='size of chunks to feed into each thread',
-                        default=100,
+                        default=-1,
                         type=int)
     return parser.parse_args()
 
@@ -210,14 +216,16 @@ if __name__ == '__main__':
     random.shuffle(repo_data)
 
     n_threads = cpu_count() * 3 if args.n_threads == 0 else args.n_threads
+    chunk_size = n_threads if args.chunk_size == -1 else args.chunk_size
+
     assert n_threads != 0
 
     # do work
-    repo_chunks = split_into_chunks(repo_data, args.chunk_size)
+    repo_chunks = split_into_chunks(repo_data, chunk_size)
     archive_name = 'github_data'
     ar = lmd.Archive(archive_name)
     pool = Pool(n_threads)
-    pbar = tqdm(repo_chunks, total=len(repo_chunks), unit_scale=args.chunk_size)
+    pbar = tqdm(repo_chunks, total=len(repo_chunks))
     commit_every = 10
     for count, chunk in enumerate(pbar):
         repos_out = pool.map(process_repo_list, chunk)
