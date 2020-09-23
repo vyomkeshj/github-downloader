@@ -198,7 +198,7 @@ def process_args():
     parser = argparse.ArgumentParser(
         description='CLI for github downloader - A tool for scraping repos as text from github')
     parser.add_argument('--n_threads', help='number of threads for parallel processing, defaults to cpu_count',
-                        default=4,
+                        default=-1,
                         type=int)
     parser.add_argument('--n_stars', help='filter repos with less than n_stars stars',
                         default=-1,
@@ -261,7 +261,7 @@ if __name__ == '__main__':
     random.seed(420)
     random.shuffle(repo_data)
 
-    n_threads = cpu_count() * 3 if args.n_threads == 0 else args.n_threads
+    n_threads = cpu_count() * 3 if args.n_threads == -1 else args.n_threads
     chunk_size = n_threads if args.chunk_size == -1 else args.chunk_size
 
     assert n_threads != 0
