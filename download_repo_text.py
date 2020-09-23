@@ -12,13 +12,18 @@ from multiprocessing import cpu_count, Pool
 from tqdm import tqdm
 import argparse
 import subprocess
+
 # from subprocess import DEVNULL, STDOUT, Popen
 
 mime = magic.Magic(mime=True)
 
+class TimeoutError(Exception):
+    pass
+
 def split_into_chunks(l, n):
     n = max(1, n)
     return [l[i:i + n] for i in range(0, len(l), n)]
+
 
 def is_digit(x):
     return x in "1234567890"
@@ -84,13 +89,14 @@ def get_content(f):
         return
 
 
-def process_repo_list(repo_data, timeout=300):
+def process_repo_list(repo_data, timeout=150):
     out = None
     try:
         name, stars, lang = repo_data
         meta = {'repo_name': name, 'stars': stars, 'repo_language': lang}
         repodir = f'./.tmp/{name.split("/")[-1]}'
-        p = subprocess.Popen(f'git clone --depth 1 --single-branch https://github.com/{name} {repodir}', shell=True, stdout=subprocess.DEVNULL, stderr=subprocess.STDOUT)
+        p = subprocess.Popen(f'git clone --depth 1 --single-branch https://github.com/{name} {repodir}', shell=True,
+                             stdout=subprocess.DEVNULL, stderr=subprocess.STDOUT)
         try:
             p.wait(timeout)
         except subprocess.TimeoutExpired:
@@ -159,7 +165,12 @@ def process_repo_list(repo_data, timeout=300):
                          -1] not in bad_extensions]
 
             filenames = [f.split("/")[-1] for f in files]
-            extensions = [mime.from_file(f) for f in files]
+            extensions = []
+            for f in files:
+                try:
+                    extensions.append(mime.from_file(f))
+                except FileNotFoundError:
+                    extensions.append("none")
             text_outputs = list(map(get_content, files))
             for i in range(len(files)):
                 text = text_outputs[i]
@@ -169,9 +180,12 @@ def process_repo_list(repo_data, timeout=300):
 
                     out = [text, meta]
         shutil.rmtree(repodir, ignore_errors=True)
-    except:
+    except TimeoutError:
+        print(f"Processing for {name} timed out")
+    except Exception:
         traceback.print_exc()
     return out
+
 
 def process_args():
     parser = argparse.ArgumentParser(
@@ -192,9 +206,32 @@ def filter_by_stars(repo_data, n_stars):
     return [item for item in repo_data if int(item[1]) >= n_stars]
 
 
+def process_repo_list_timeout(repo_data):
+    return timeout(process_repo_list, args=(repo_data,))
+
+
+def timeout(func, args=(), kwargs={}, timeout_duration=300, default=None):
+    import signal
+
+    def handler(signum, frame):
+        raise TimeoutError()
+
+    # set the timeout handler
+    signal.signal(signal.SIGALRM, handler)
+    signal.alarm(timeout_duration)
+    try:
+        result = func(*args, **kwargs)
+    except TimeoutError:
+        result = default
+    finally:
+        signal.alarm(0)
+
+    return result
+
+
 if __name__ == '__main__':
 
-    args = process_args() # parse args
+    args = process_args()  # parse args
 
     # make output dirs
     if '.tmp' not in os.listdir():
@@ -215,7 +252,7 @@ if __name__ == '__main__':
     random.seed(420)
     random.shuffle(repo_data)
 
-    n_threads = cpu_count() * 3 if args.n_threads == 0 else args.n_threads
+    n_threads = cpu_count() if args.n_threads == 0 else args.n_threads
     chunk_size = n_threads if args.chunk_size == -1 else args.chunk_size
 
     assert n_threads != 0
@@ -228,9 +265,16 @@ if __name__ == '__main__':
     pbar = tqdm(repo_chunks, total=len(repo_chunks))
     commit_every = 10
     for count, chunk in enumerate(pbar):
-        repos_out = pool.map(process_repo_list, chunk)
+        repos_out = pool.map(process_repo_list_timeout, chunk)
+        not_none = 0
+        none = 0
         for r in repos_out:
             if r is not None:
+                not_none += 1
                 ar.add_data(r[0], meta=r[1])
+            else:
+                none += 1
         if count % commit_every == 0:
             ar.commit()
+        success_rate = (not_none / len(repos_out)) * 100
+        pbar.set_postfix({"Success Rate": success_rate})
