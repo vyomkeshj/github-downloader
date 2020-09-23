@@ -12,13 +12,16 @@ from multiprocessing import cpu_count, Pool
 from tqdm import tqdm
 import argparse
 import subprocess
+from itertools import repeat
 
 # from subprocess import DEVNULL, STDOUT, Popen
 
 mime = magic.Magic(mime=True)
 
+
 class TimeoutError(Exception):
     pass
+
 
 def split_into_chunks(l, n):
     n = max(1, n)
@@ -92,20 +95,30 @@ def get_content(f):
         return
 
 
-def process_repo_list(repo_data, timeout=300):
-    out = None
+def timeout(func, args=(), kwargs={}, timeout_duration=600, default=None):
+    import signal
+
+    def handler(signum, frame):
+        raise TimeoutError()
+
+    # set the timeout handler
+    signal.signal(signal.SIGALRM, handler)
+    signal.alarm(timeout_duration)
     try:
-        name, stars, lang = repo_data
-        meta = {'repo_name': name, 'stars': stars, 'repo_language': lang}
-        repodir = f'./.tmp/{name.split("/")[-1]}'
-        p = subprocess.Popen(f'GIT_TERMINAL_PROMPT=0 git clone --depth 1 --single-branch https://github.com/{name} {repodir}', shell=True,
-                             stdout=subprocess.DEVNULL, stderr=subprocess.STDOUT)
-        try:
-            p.wait(timeout)
-        except subprocess.TimeoutExpired:
-            print(f'Git clone timed out for {name}')
-            p.kill()
-        shutil.rmtree(f'{repodir}/.git', ignore_errors=True)
+        result = func(*args, **kwargs)
+    except TimeoutError:
+        result = default
+    finally:
+        signal.alarm(0)
+
+    return result
+
+
+def _process_repo(repo_data, repodir):
+    out = None
+    name, stars, lang = repo_data
+    meta = {'repo_name': name, 'stars': stars, 'repo_language': lang}
+    try:
         for curdir, dirs, files in os.walk(repodir):
             bad_extensions = [
                 'app',
@@ -187,11 +200,38 @@ def process_repo_list(repo_data, timeout=300):
         shutil.rmtree(repodir, ignore_errors=True)
     except TimeoutError:
         print(f"Processing for {name} timed out")
+    return out
+
+
+def process_repo(repo_data, repodir, processing_timeout):
+    return timeout(_process_repo, args=(repo_data, repodir), timeout_duration=processing_timeout)
+
+
+def process_repo_list(repo_data, clone_timeout, processing_timeout):
+    out = None
+    try:
+        name, stars, lang = repo_data
+        repodir = f'./.tmp/{name.split("/")[-1]}'
+        p = subprocess.Popen(
+            f'GIT_TERMINAL_PROMPT=0 git clone --depth 1 --single-branch https://github.com/{name} {repodir}',
+            shell=True,
+            stdout=subprocess.DEVNULL, stderr=subprocess.STDOUT)
+        try:
+            p.wait(clone_timeout)
+        except subprocess.TimeoutExpired:
+            print(f'Git clone timed out for {name}')
+            p.kill()
+        shutil.rmtree(f'{repodir}/.git', ignore_errors=True)
+        out = process_repo(repo_data, repodir, processing_timeout=processing_timeout)
     except Exception:
         err = traceback.format_exc()
         if verbose:
             print(err)
     return out
+
+
+def filter_by_stars(repo_data, n_stars):
+    return [item for item in repo_data if int(item[1]) >= n_stars]
 
 
 def process_args():
@@ -206,35 +246,14 @@ def process_args():
     parser.add_argument('--chunk_size', help='size of chunks to feed into each thread',
                         default=-1,
                         type=int)
-    parser.add_argument('-v','--verbose', help='if flag is present, print errors', action='store_true')
+    parser.add_argument('--clone_timeout', help='timeout for git clone command in seconds',
+                        default=150,
+                        type=int)
+    parser.add_argument('--processing_timeout', help='timeout for processing repo to text files in seconds',
+                        default=150,
+                        type=int)
+    parser.add_argument('-v', '--verbose', help='if flag is present, print errors', action='store_true')
     return parser.parse_args()
-
-
-def filter_by_stars(repo_data, n_stars):
-    return [item for item in repo_data if int(item[1]) >= n_stars]
-
-
-def process_repo_list_timeout(repo_data):
-    return timeout(process_repo_list, args=(repo_data,))
-
-
-def timeout(func, args=(), kwargs={}, timeout_duration=600, default=None):
-    import signal
-
-    def handler(signum, frame):
-        raise TimeoutError()
-
-    # set the timeout handler
-    signal.signal(signal.SIGALRM, handler)
-    signal.alarm(timeout_duration)
-    try:
-        result = func(*args, **kwargs)
-    except TimeoutError:
-        result = default
-    finally:
-        signal.alarm(0)
-
-    return result
 
 
 if __name__ == '__main__':
@@ -261,7 +280,7 @@ if __name__ == '__main__':
     random.seed(420)
     random.shuffle(repo_data)
 
-    n_threads = cpu_count() * 3 if args.n_threads == -1 else args.n_threads
+    n_threads = cpu_count() if args.n_threads == -1 else args.n_threads
     chunk_size = n_threads if args.chunk_size == -1 else args.chunk_size
 
     assert n_threads != 0
@@ -275,13 +294,15 @@ if __name__ == '__main__':
     commit_every = 10
     success_hist = []
     for count, chunk in enumerate(pbar):
-        repos_out = pool.map(process_repo_list_timeout, chunk)
+        repos_out = pool.starmap(process_repo_list,
+                                 zip(chunk, repeat(args.clone_timeout), repeat(args.processing_timeout)))
         not_none = 0
         none = 0
         for repo in repos_out:
             if repo is not None:
                 not_none += 1
                 for f in repo:
+                    print(f)
                     ar.add_data(f[0], meta=f[1])
             else:
                 none += 1
