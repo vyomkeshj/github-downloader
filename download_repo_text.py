@@ -5,7 +5,6 @@ import os
 import random
 import sys
 import traceback
-import time
 import shutil
 import csv
 from multiprocessing import cpu_count, Pool
@@ -14,13 +13,87 @@ import argparse
 import subprocess
 from itertools import repeat
 
-# from subprocess import DEVNULL, STDOUT, Popen
+bad_extensions = [
+    'app',
+    'bin',
+    'bmp',
+    'bz2',
+    'class',
+    'csv',
+    'dat',
+    'db',
+    'dll',
+    'dylib',
+    'egg',
+    'eot',
+    'exe',
+    'gif',
+    'gitignore',
+    'glif',
+    'gradle',
+    'gz',
+    'ico',
+    'jar',
+    'jpeg',
+    'jpg',
+    'lo',
+    'lock',
+    'log',
+    'mp3',
+    'mp4',
+    'nar',
+    'o',
+    'ogg',
+    'otf',
+    'p',
+    'pdf',
+    'png',
+    'pickle',
+    'pkl',
+    'pyc',
+    'pyd',
+    'pyo',
+    'rkt',
+    'so',
+    'ss',
+    'svg',
+    'tar',
+    'tsv',
+    'ttf',
+    'war',
+    'webm',
+    'woff',
+    'woff2',
+    'xz',
+    'zip',
+    'zst'
+]
 
 mime = magic.Magic(mime=True)
 
 
 class TimeoutError(Exception):
     pass
+
+
+def timeout(func, args=(), kwargs={}, timeout_duration=150, default=None):
+    # wrap any function in this wrapper to raise a TimeoutError after timeout_duration secs
+    import signal
+
+    def handler(signum, frame):
+        raise TimeoutError()
+
+    # set the timeout handler
+    signal.signal(signal.SIGALRM, handler)
+    signal.alarm(timeout_duration)
+    try:
+        result = func(*args, **kwargs)
+    except TimeoutError:
+        result = default
+    finally:
+        signal.alarm(0)
+
+    return result
 
 
 def split_into_chunks(l, n):
@@ -33,6 +106,7 @@ def is_digit(x):
 
 
 def keep(x):
+    # simple filters to decide whether a file is worth keeping
     num_digits = len(list(filter(is_digit, x)))
     num_newlines = len(list(filter(lambda x: x == '\n', x)))
     if num_digits / len(x) > 0.8:
@@ -45,7 +119,13 @@ def keep(x):
     return True
 
 
+def filter_by_stars(repo_data, n_stars):
+    return [item for item in repo_data if int(item[1]) >= n_stars]
+
+
 def get_content(f):
+    # discerns filetype with mime and reads text from file if possible
+
     type = None
     try:
         enc = 'utf-8'
@@ -73,12 +153,6 @@ def get_content(f):
             return buf
         except UnicodeDecodeError:
             return
-        except:
-            err = traceback.format_exc()
-            if verbose:
-                print(err)
-            time.sleep(0.1)
-            return
     except KeyboardInterrupt:
         sys.exit()
     except FileNotFoundError:
@@ -87,94 +161,15 @@ def get_content(f):
         if not os.path.islink(f):
             # something went horribly wrong!
             ...
-    except:
-        err = traceback.format_exc()
-        if verbose:
-            print(err)
-        time.sleep(0.1)
-        return
-
-
-def timeout(func, args=(), kwargs={}, timeout_duration=600, default=None):
-    import signal
-
-    def handler(signum, frame):
-        raise TimeoutError()
-
-    # set the timeout handler
-    signal.signal(signal.SIGALRM, handler)
-    signal.alarm(timeout_duration)
-    try:
-        result = func(*args, **kwargs)
-    except TimeoutError:
-        result = default
-    finally:
-        signal.alarm(0)
-
-    return result
 
 
 def _process_repo(repo_data, repodir):
     out = None
+    # get metadata
     name, stars, lang = repo_data
     meta = {'repo_name': name, 'stars': stars, 'repo_language': lang}
     try:
         for curdir, dirs, files in os.walk(repodir):
-            bad_extensions = [
-                'app',
-                'bin',
-                'bmp',
-                'bz2',
-                'class',
-                'csv',
-                'dat',
-                'db',
-                'dll',
-                'dylib',
-                'egg',
-                'eot',
-                'exe',
-                'gif',
-                'gitignore',
-                'glif',
-                'gradle',
-                'gz',
-                'ico',
-                'jar',
-                'jpeg',
-                'jpg',
-                'lo',
-                'lock',
-                'log',
-                'mp3',
-                'mp4',
-                'nar',
-                'o',
-                'ogg',
-                'otf',
-                'p',
-                'pdf',
-                'png',
-                'pickle',
-                'pkl',
-                'pyc',
-                'pyd',
-                'pyo',
-                'rkt',
-                'so',
-                'ss',
-                'svg',
-                'tar',
-                'tsv',
-                'ttf',
-                'war',
-                'webm',
-                'woff',
-                'woff2',
-                'xz',
-                'zip',
-                'zst'
-            ]
 
             files = [curdir + '/' + f for f in files if '.git' not in f and f[
                 0] is not '.' and 'LICENSE' not in f and 'node_modules' not in f and '.min.' not in f and f.split('.')[
@@ -186,8 +181,15 @@ def _process_repo(repo_data, repodir):
                 try:
                     extensions.append(mime.from_file(f))
                 except FileNotFoundError:
-                    extensions.append("none")
-            text_outputs = list(map(get_content, files))
+                    extensions.append("n/a")
+            text_outputs = []
+            for f in files:
+                try:
+                    text_outputs.append(get_content(f))
+                except TimeoutError:
+                    raise TimeoutError
+                except:
+                    text_outputs.append(None)
             for i in range(len(files)):
                 text = text_outputs[i]
                 if text is not None:
@@ -212,6 +214,7 @@ def process_repo_list(repo_data, clone_timeout, processing_timeout):
     try:
         name, stars, lang = repo_data
         repodir = f'./.tmp/{name.split("/")[-1]}'
+        # clones master branch of repos with depth 1 (most recent commit only), ignoring any terminal prompts
         p = subprocess.Popen(
             f'GIT_TERMINAL_PROMPT=0 git clone --depth 1 --single-branch https://github.com/{name} {repodir}',
             shell=True,
@@ -219,19 +222,16 @@ def process_repo_list(repo_data, clone_timeout, processing_timeout):
         try:
             p.wait(clone_timeout)
         except subprocess.TimeoutExpired:
-            print(f'Git clone timed out for {name}')
+            print(f'Git clone for {name} timed out ')
             p.kill()
         shutil.rmtree(f'{repodir}/.git', ignore_errors=True)
+        # extracts text files from repo and returns them as list : [[text, metadata], ... ]
         out = process_repo(repo_data, repodir, processing_timeout=processing_timeout)
     except Exception:
         err = traceback.format_exc()
         if verbose:
             print(err)
     return out
-
-
-def filter_by_stars(repo_data, n_stars):
-    return [item for item in repo_data if int(item[1]) >= n_stars]
 
 
 def process_args():
@@ -251,6 +251,9 @@ def process_args():
                         type=int)
     parser.add_argument('--processing_timeout', help='timeout for processing repo to text files in seconds',
                         default=150,
+                        type=int)
+    parser.add_argument('--commit_freq', help='how often (in number of chunks) to commit the archive file',
+                        default=10,
                         type=int)
     parser.add_argument('-v', '--verbose', help='if flag is present, print errors', action='store_true')
     return parser.parse_args()
@@ -291,7 +294,6 @@ if __name__ == '__main__':
     ar = lmd.Archive(archive_name)
     pool = Pool(n_threads)
     pbar = tqdm(repo_chunks, total=len(repo_chunks))
-    commit_every = 10
     success_hist = []
     for count, chunk in enumerate(pbar):
         repos_out = pool.starmap(process_repo_list,
@@ -305,9 +307,12 @@ if __name__ == '__main__':
                     ar.add_data(f[0], meta=f[1])
             else:
                 none += 1
+
+        # remove any leftover files
         subprocess.Popen("rm -rfv .tmp && mkdir .tmp", shell=True, stdout=subprocess.DEVNULL, stderr=subprocess.STDOUT)
-        if count % commit_every == 0:
+        if count % args.commit_freq == 0:
             ar.commit()
         success_hist.append((not_none / len(repos_out)) * 100)
         success_rate = sum(success_hist) / len(success_hist)
         pbar.set_postfix({"Success Rate": success_rate})
+    ar.commit() # final commit
