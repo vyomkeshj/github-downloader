@@ -302,7 +302,6 @@ if __name__ == '__main__':
             if repo is not None:
                 not_none += 1
                 for f in repo:
-                    print(f)
                     ar.add_data(f[0], meta=f[1])
             else:
                 none += 1
