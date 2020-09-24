@@ -34,7 +34,7 @@ def save_ckpt(lower_bound: int, upper_bound: int, repo_list):
     with open('repo_ckpt.pkl', 'wb') as f:
         pickle.dump((lower_bound, upper_bound, repo_list), f)
 
-def get_request(lower_bound: int, upper_bound: int, page: int = 1, repo_list):
+def get_request(lower_bound: int, upper_bound: int, repo_list, page: int = 1):
     # Returns a request object from querying GitHub 
     # for repos in-between size lower_bound and size upper_bound with over 100 stars.
     r = requests.get(
@@ -76,7 +76,7 @@ def download_range(lower_bound, upper_bound, repo_list):
     # in-between size minimum and maximum with over 100 stars.
     # Github page options start at index 1.
     for page in range(1, 11):
-        r = get_request(lower_bound=lower_bound, upper_bound=upper_bound, page=page)
+        r = get_request(lower_bound=lower_bound, upper_bound=upper_bound, repo_list=repo_list, page=page)
 
         if page == 1:
             n_results = r.json()['total_count']
@@ -113,7 +113,7 @@ Please delete `repo_ckpt.pkl` to restart and try again.
         exit()
 
     
-    r = get_request(lower_bound, upper_bound)
+    r = get_request(lower_bound, upper_bound, repo_list)
 
     # Initial number of results
     n_results = r.json()['total_count']
