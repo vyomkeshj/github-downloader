@@ -271,7 +271,7 @@ if __name__ == '__main__':
         os.makedirs('github_data')
 
     # read repo data to a tuple (reponame, n_stars, language)
-    with open('github_repositories.csv', 'r') as f:
+    with open('github_repositories_sql.csv', 'r') as f:
         csv_reader = csv.reader(f)
         repo_data = list(map(tuple, csv_reader))
 
