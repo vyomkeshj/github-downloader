@@ -21,9 +21,7 @@ nystudio107/craft,196,TSQL
 cyq1162/Aries,417,SQLPL
 evemuproject/evemu_server,140,TSQL
 smartchicago/chicago-atlas,150,PLpgSQL
-iamdarcy/hioshop-server,167,PLpgSQL
 mapbox/postgis-vt-util,197,PLpgSQL
-SeriaWei/ZKEACMS,2173,TSQL
 OPMDG/opm-core,149,PLpgSQL
 morenoh149/postgresDBSamples,106,PLpgSQL
 developerworks/hierarchy-data-closure-table,130,PLpgSQL
@@ -106,7 +104,6 @@ ahmadazizi/iran-cities,144,TSQL
 leehach/census-postgres,112,SQL
 vimagick/dockerfiles,1963,TSQL
 WikiToLearn/WikiToLearn,184,TSQL
-CRLibre/API_Hacienda,111,TSQL
 qaprosoft/qps-infra,119,TSQL
 SimmerChan/KG-demo-for-movie,727,TSQL
 ankane/groupdate.sql,253,PLpgSQL
@@ -114,7 +111,6 @@ kelvins/Municipios-Brasileiros,482,TSQL
 TrinityCore/WowPacketParser,245,TSQL
 PokemonUnity/PokemonUnity,794,TSQL
 subzerocloud/subzero-starter-kit,126,PLpgSQL
-MontageD/nuxt-maopingshou,290,TSQL
 markjprice/cs8dotnetcore3,104,TSQL
 BedquiltDB/bedquilt-core,254,PLpgSQL
 rentrop/serverless-postgraphql,106,PLpgSQL
@@ -126,7 +122,6 @@ oracle/db-sample-schemas,336,TSQL
 utPLSQL/utPLSQL,360,PLSQL
 wandou911/ssr,346,TSQL
 gavinwahl/postgres-json-schema,270,PLpgSQL
-zoghal/Presian-Date-for-MySQL,120,TSQL
 MicrosoftLearning/DP-200-Implementing-an-Azure-Data-Solution,241,TSQL
 devrimgunduz/pagila,130,PLpgSQL
 oracle/analytical-sql-examples,116,PLSQL
@@ -137,15 +132,12 @@ orbisgis/h2gis,139,TSQL
 objectrocket/ansible-hadoop,121,TSQL
 jOOQ/jOOQ,3902,TSQL
 cmangos/classic-db,101,TSQL
-Yin-Hongwei/music-website,169,TSQL
-Tencent/TH_COVID19_International,328,TSQL
 Pelhans/Z_knowledge_graph,476,TSQL
 begriffs/pg_rational,143,PLpgSQL
 handsonscala/handsonscala,259,TSQL
 mike-works/sql-fundamentals,117,TSQL
 postgis/postgis,828,PLpgSQL
 CrunchyData/pgmonitor,151,PLpgSQL
-IBM/spark-tpc-ds-performance-test,112,TSQL
 subzerocloud/postgrest-starter-kit,576,PLpgSQL
 404notf0und/Security-Data-Analysis-and-Visualization,592,TSQL
 geocompass/pg-coordtransform,156,PLpgSQL
@@ -153,7 +145,6 @@ yoosuf/Messenger,307,TSQL
 fecgov/openFEC,358,TSQL
 bkiers/sqlite-parser,115,PLpgSQL
 OraOpenSource/oos-utils,136,PLSQL
-nnkwrik/weapp-fangxianyu,124,TSQL
 hiiamrohit/Countries-States-Cities-database,736,TSQL
 pgpointcloud/pointcloud,268,PLpgSQL
 dufyun/learn-tech-collection,132,TSQL
@@ -168,10 +159,8 @@ umpirsky/country-list,4401,TSQL
 mortenbra/alexandria-plsql-utils,519,PLSQL
 mixerp/plpgunit,101,PLpgSQL
 2gis/partition_magic,110,PLpgSQL
-TuiQiao/CBoard,2472,TSQL
 hortonworks/hive-testbench,180,TSQL
 eduosi/district,875,TSQL
-lihaoyi/macropy,2990,TSQL
 aws-samples/amazon-redshift-udfs,185,PLpgSQL
 marcingminski/sqlwatch,163,TSQL
 frou/pg2go,115,PLpgSQL
