@@ -112,7 +112,6 @@ filerun/docker,129,TSQL
 bgkatz/3phase_integrated,128,PLSQL
 NikolayS/postgres_dba,490,TSQL
 aquametalabs/aquameta,904,PLpgSQL
-oracle/learning-library,430,PLSQL
 mixerp/mixerp,452,PLpgSQL
 digoal/blog,5091,PLpgSQL
 MichelleUfford/sql-scripts,187,SQLPL
